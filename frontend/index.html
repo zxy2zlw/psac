@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>PSAC 6mA 甲基化预测系统</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f1f3f8;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 800px;
+      margin: 50px auto;
+      background-color: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h2 {
+      text-align: center;
+      color: #2c3e50;
+      margin-bottom: 30px;
+    }
+    .tabs {
+      display: flex;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #e0e0e0;
+    }
+    .tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      margin-right: 10px;
+      border-radius: 5px 5px 0 0;
+      background-color: #f8f9fa;
+    }
+    .tab.active {
+      background-color: #3498db;
+      color: white;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+      color: #2c3e50;
+    }
+    textarea, input[type="file"], select {
+      width: 100%;
+      padding: 10px;
+      margin-top: 8px;
+      font-size: 14px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    textarea:focus, select:focus {
+      outline: none;
+      border-color: #3498db;
+    }
+    button {
+      margin-top: 20px;
+      padding: 12px 25px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      border-radius: 5px;
+      transition: background-color 0.3s;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    .result-box {
+      margin-top: 25px;
+      padding: 20px;
+      border-radius: 5px;
+      background-color: #f8f9fa;
+      border-left: 5px solid #3498db;
+      color: #2c3e50;
+    }
+    .error {
+      color: #e74c3c;
+      margin-top: 15px;
+      padding: 10px;
+      background-color: #fde8e8;
+      border-radius: 4px;
+      display: none;
+    }
+    .loading {
+      display: none;
+      text-align: center;
+      margin-top: 20px;
+    }
+    .loading::after {
+      content: "预测中...";
+      color: #3498db;
+    }
+    .sequence-validation {
+      font-size: 12px;
+      margin-top: 5px;
+      color: #666;
+    }
+    .file-hint {
+      font-size: 12px;
+      color: #666;
+      margin: 5px 0 10px;
+    }
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    .results-table th, .results-table td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    .results-table th {
+      background-color: #f8f9fa;
+    }
+    .results-table tr:nth-child(even) {
+      background-color: #f8f9fa;
+    }
+    .download-hint {
+      margin-top: 10px;
+      font-style: italic;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>PSAC DNA 6mA 甲基化位点预测</h2>
+    
+    <div class="tabs">
+      <div class="tab active" data-tab="sequence">序列输入</div>
+      <div class="tab" data-tab="file">文件上传</div>
+    </div>
+
+    <div id="sequenceInput" class="tab-content active">
+      <form id="sequenceForm">
+        <label>输入 DNA 序列（41 个碱基）</label>
+        <textarea name="sequence" rows="4" placeholder="例如：AGCTCGATCGATCGATCGATCGATCGATCGATCGATCGATCGA"></textarea>
+        <div class="sequence-validation">当前长度：<span id="seqLength">0</span>/41</div>
+        
+        <label>选择物种</label>
+        <select name="species" required>
+          <option value="">请选择物种</option>
+        </select>
+
+        <button type="submit">提交预测</button>
+      </form>
+    </div>
+
+    <div id="fileInput" class="tab-content">
+      <form id="fileForm">
+        <label>上传包含 DNA 序列的文本文件（.txt / .fasta）</label>
+        <p class="file-hint">每行一个序列，每个序列41个碱基</p>
+        <input type="file" name="file" accept=".txt,.fasta" required />
+        
+        <label>选择物种</label>
+        <select name="species" required>
+          <option value="">请选择物种</option>
+        </select>
+
+        <label>输出格式</label>
+        <select name="output_format" required>
+          <option value="excel">Excel 表格</option>
+          <option value="json">JSON 格式</option>
+        </select>
+
+        <button type="submit">提交预测</button>
+      </form>
+    </div>
+
+    <div id="loading" class="loading"></div>
+    <div id="result" class="result-box" style="display:none;"></div>
+    <div id="error" class="error"></div>
+  </div>
+
+  <script>
+    // 切换标签
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.tab + 'Input').classList.add('active');
+        
+        // 重置表单和错误提示
+        document.getElementById('error').style.display = 'none';
+        document.getElementById('result').style.display = 'none';
+      });
+    });
+
+    // 序列长度验证
+    const textarea = document.querySelector('textarea[name="sequence"]');
+    const seqLength = document.getElementById('seqLength');
+    
+    textarea.addEventListener('input', () => {
+      const length = textarea.value.replace(/\s/g, '').length;
+      seqLength.textContent = length;
+      
+      if (length !== 41) {
+        seqLength.style.color = '#e74c3c';
+      } else {
+        seqLength.style.color = '#27ae60';
+      }
+    });
+
+    // 加载物种列表
+    window.onload = async () => {
+      try {
+        const res = await fetch("/species");
+        const speciesList = await res.json();
+        
+        document.querySelectorAll('select[name="species"]').forEach(select => {
+          select.innerHTML = '<option value="">请选择物种</option>';
+          speciesList.forEach(species => {
+            const option = document.createElement("option");
+            option.value = species;
+            option.textContent = species;
+            select.appendChild(option);
+          });
+        });
+      } catch (err) {
+        showError("无法加载物种列表：" + err.message);
+      }
+    };
+
+    // 显示错误信息
+    function showError(message) {
+      const errorBox = document.getElementById('error');
+      errorBox.textContent = message;
+      errorBox.style.display = 'block';
+      document.getElementById('loading').style.display = 'none';
+    }
+
+    // 显示结果
+    function showResult(data) {
+      const resultBox = document.getElementById('result');
+      resultBox.innerHTML = `
+        <strong>预测结果：</strong><br>
+        <strong>物种：</strong> ${data.species}<br>
+        <strong>序列：</strong> ${data.sequence}<br>
+        <strong>预测概率：</strong> ${data.probability}<br>
+        <strong>结果判定：</strong> <span style="color: ${data.prediction === '甲基化' ? '#27ae60' : '#e74c3c'};">
+          ${data.prediction}
+        </span>
+      `;
+      resultBox.style.display = 'block';
+      document.getElementById('loading').style.display = 'none';
+    }
+
+    // 处理序列输入表单提交
+    document.getElementById('sequenceForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const sequence = textarea.value.trim();
+      
+      if (sequence.length !== 41) {
+        showError("序列长度必须为 41 个碱基");
+        return;
+      }
+      
+      const formData = new FormData(e.target);
+      await submitPrediction(formData);
+    });
+
+    // 处理文件上传表单提交
+    document.getElementById('fileForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const outputFormat = formData.get('output_format');
+
+      document.getElementById('error').style.display = 'none';
+      document.getElementById('result').style.display = 'none';
+      document.getElementById('loading').style.display = 'block';
+
+      try {
+        const response = await fetch("/predict", {
+          method: "POST",
+          body: formData
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          showError(data.error || "预测失败");
+          return;
+        }
+
+        if (outputFormat === 'excel') {
+          // 处理Excel下载
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = response.headers.get('content-disposition')?.split('filename=')[1] || 'predictions.xlsx';
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+          
+          const resultBox = document.getElementById('result');
+          resultBox.innerHTML = `
+            <div style="text-align: center;">
+              <h3>预测完成！</h3>
+              <p class="download-hint">Excel文件已开始下载，如果没有自动下载，请检查浏览器设置。</p>
+            </div>
+          `;
+          resultBox.style.display = 'block';
+        } else {
+          // 显示JSON结果
+          const results = await response.json();
+          const resultBox = document.getElementById('result');
+          
+          if (results.length === 0) {
+            showError("没有有效的预测结果");
+            return;
+          }
+
+          let tableHtml = `
+            <h3>预测结果</h3>
+            <table class="results-table">
+              <thead>
+                <tr>
+                  <th>序号</th>
+                  <th>序列</th>
+                  <th>预测概率</th>
+                  <th>结果判定</th>
+                </tr>
+              </thead>
+              <tbody>
+          `;
+
+          results.forEach(result => {
+            tableHtml += `
+              <tr>
+                <td>${result.sequence_number}</td>
+                <td>${result.sequence}</td>
+                <td>${result.probability}</td>
+                <td style="color: ${result.prediction === '甲基化' ? '#27ae60' : '#e74c3c'}">
+                  ${result.prediction}
+                </td>
+              </tr>
+            `;
+          });
+
+          tableHtml += `
+              </tbody>
+            </table>
+          `;
+
+          resultBox.innerHTML = tableHtml;
+          resultBox.style.display = 'block';
+        }
+      } catch (err) {
+        showError("请求错误：" + err.message);
+      } finally {
+        document.getElementById('loading').style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>
+
