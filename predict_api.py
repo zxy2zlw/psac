@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, UploadFile, Form, File
+from fastapi import FastAPI, UploadFile, Form, File, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,8 +7,15 @@ import torch
 from Model import Deepnet
 import pandas as pd
 import tempfile
-from typing import List
+from typing import List, Dict
 import io
+import logging
+from functools import lru_cache
+import time
+
+# 設置日誌
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -23,6 +30,9 @@ app.add_middleware(
 
 # 強制使用 CPU
 device = torch.device("cpu")
+
+# 模型緩存
+model_cache: Dict[str, Deepnet] = {}
 
 # 自动扫描模型目录，构建物种-模型文件路径映射
 def load_available_models(model_dir="DNA_model"):
@@ -47,22 +57,41 @@ def encode_sequence(seq):
     except KeyError as e:
         raise ValueError(f"无效碱基字符：{e}")
 
+def get_model(species: str) -> Deepnet:
+    """獲取模型，如果緩存中沒有則載入"""
+    if species not in model_cache:
+        try:
+            model = Deepnet(feature=128, dropout=0.3, filter_num=128, seq_len=41).to(device)
+            model.load_state_dict(torch.load(species_model_paths[species], map_location=device))
+            model.eval()
+            model_cache[species] = model
+            logger.info(f"Loaded model for species: {species}")
+        except Exception as e:
+            logger.error(f"Error loading model for species {species}: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"模型載入失敗：{str(e)}")
+    return model_cache[species]
+
 def process_sequences(sequences: List[str], model) -> List[dict]:
     results = []
     for i, seq in enumerate(sequences, 1):
-        seq = seq.strip()
-        if len(seq) != 41:
+        try:
+            seq = seq.strip()
+            if len(seq) != 41:
+                logger.warning(f"Invalid sequence length {len(seq)} at position {i}")
+                continue
+            
+            input_tensor = encode_sequence(seq)
+            with torch.no_grad():
+                output = model(input_tensor).item()
+                results.append({
+                    "sequence_number": i,
+                    "sequence": seq,
+                    "probability": round(output, 4),
+                    "prediction": "甲基化" if output >= 0.5 else "非甲基化"
+                })
+        except Exception as e:
+            logger.error(f"Error processing sequence at position {i}: {str(e)}")
             continue
-        
-        input_tensor = encode_sequence(seq)
-        with torch.no_grad():
-            output = model(input_tensor).item()
-            results.append({
-                "sequence_number": i,
-                "sequence": seq,
-                "probability": round(output, 4),
-                "prediction": "甲基化" if output >= 0.5 else "非甲基化"
-            })
     return results
 
 @app.post("/predict")
@@ -70,15 +99,15 @@ async def predict(
     sequence: str = Form(None),
     file: UploadFile = File(None),
     species: str = Form(...),
-    output_format: str = Form("json")  # 新增参数：输出格式
+    output_format: str = Form("json")
 ):
+    start_time = time.time()
     try:
         if species not in species_model_paths:
-            return JSONResponse({"error": f"物种 '{species}' 未支持"}, status_code=400)
+            raise HTTPException(status_code=400, detail=f"物種 '{species}' 未支持")
 
-        model = Deepnet(feature=128, dropout=0.3, filter_num=128, seq_len=41).to(device)
-        model.load_state_dict(torch.load(species_model_paths[species], map_location=device))
-        model.eval()
+        # 獲取模型（使用緩存）
+        model = get_model(species)
 
         # 僅當 file 存在且有檔名時才進入文件分支
         if file is not None and getattr(file, "filename", None) and file.filename != "":
@@ -87,12 +116,9 @@ async def predict(
             results = process_sequences(sequences, model)
 
             if output_format == "excel":
-                # 创建 DataFrame
                 df = pd.DataFrame(results)
-                # 创建临时文件
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
                     df.to_excel(tmp.name, index=False)
-                # 返回 Excel 文件
                 return FileResponse(
                     tmp.name,
                     media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -105,21 +131,24 @@ async def predict(
         elif sequence:
             seq = sequence.strip()
             if len(seq) != 41:
-                return JSONResponse({"error": f"输入序列长度必须为 41 个碱基，当前为 {len(seq)}"}, status_code=400)
+                raise HTTPException(status_code=400, detail=f"輸入序列長度必須為 41 個鹼基，當前為 {len(seq)}")
 
             input_tensor = encode_sequence(seq)
             with torch.no_grad():
                 output = model(input_tensor).item()
-                return {
+                result = {
                     "species": species,
                     "sequence": seq,
                     "probability": round(output, 4),
                     "prediction": "甲基化" if output >= 0.5 else "非甲基化"
                 }
+                logger.info(f"Prediction completed in {time.time() - start_time:.2f} seconds")
+                return result
         else:
-            return JSONResponse({"error": "必须提供 DNA 序列或文件"}, status_code=400)
+            raise HTTPException(status_code=400, detail="必須提供 DNA 序列或文件")
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        logger.error(f"Error in predict endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # 挂载前端静态文件夹
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")

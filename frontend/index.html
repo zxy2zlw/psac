@@ -3,66 +3,88 @@
 <head>
   <meta charset="UTF-8" />
   <title>PSAC 6mA 甲基化预测系统</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background-color: #f1f3f8;
+      font-family: 'Noto Sans TC', Arial, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
       margin: 0;
       padding: 0;
+      min-height: 100vh;
     }
     .container {
       max-width: 800px;
       margin: 50px auto;
       background-color: white;
       padding: 30px;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      border-radius: 15px;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.1);
     }
     h2 {
       text-align: center;
       color: #2c3e50;
       margin-bottom: 30px;
+      font-weight: 700;
     }
     .tabs {
       display: flex;
       margin-bottom: 20px;
       border-bottom: 2px solid #e0e0e0;
+      background: #f8f9fa;
+      border-radius: 8px 8px 0 0;
+      padding: 5px;
     }
     .tab {
-      padding: 10px 20px;
+      padding: 12px 25px;
       cursor: pointer;
-      margin-right: 10px;
-      border-radius: 5px 5px 0 0;
-      background-color: #f8f9fa;
+      margin-right: 5px;
+      border-radius: 6px;
+      background-color: transparent;
+      transition: all 0.3s ease;
+      font-weight: 500;
+    }
+    .tab:hover {
+      background-color: rgba(52, 152, 219, 0.1);
     }
     .tab.active {
       background-color: #3498db;
       color: white;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
     .tab-content {
       display: none;
+      padding: 20px;
+      background: white;
+      border-radius: 0 0 8px 8px;
     }
     .tab-content.active {
       display: block;
+      animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
     }
     label {
       display: block;
       margin-top: 15px;
-      font-weight: bold;
+      font-weight: 500;
       color: #2c3e50;
     }
     textarea, input[type="file"], select {
       width: 100%;
-      padding: 10px;
+      padding: 12px;
       margin-top: 8px;
       font-size: 14px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
       box-sizing: border-box;
+      transition: all 0.3s ease;
     }
     textarea:focus, select:focus {
       outline: none;
       border-color: #3498db;
+      box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
     }
     button {
       margin-top: 20px;
@@ -72,36 +94,67 @@
       border: none;
       cursor: pointer;
       font-size: 16px;
-      border-radius: 5px;
-      transition: background-color 0.3s;
+      border-radius: 8px;
+      transition: all 0.3s ease;
+      font-weight: 500;
+      width: 100%;
     }
     button:hover {
       background-color: #2980b9;
+      transform: translateY(-1px);
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    button:active {
+      transform: translateY(0);
     }
     .result-box {
       margin-top: 25px;
       padding: 20px;
-      border-radius: 5px;
+      border-radius: 8px;
       background-color: #f8f9fa;
       border-left: 5px solid #3498db;
       color: #2c3e50;
+      animation: slideIn 0.3s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-10px); }
+      to { opacity: 1; transform: translateX(0); }
     }
     .error {
       color: #e74c3c;
       margin-top: 15px;
-      padding: 10px;
+      padding: 15px;
       background-color: #fde8e8;
-      border-radius: 4px;
+      border-radius: 8px;
       display: none;
+      animation: shake 0.5s ease;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      75% { transform: translateX(5px); }
     }
     .loading {
       display: none;
       text-align: center;
       margin-top: 20px;
+      padding: 20px;
     }
     .loading::after {
-      content: "预测中...";
-      color: #3498db;
+      content: "";
+      display: inline-block;
+      width: 30px;
+      height: 30px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #3498db;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 10px;
+      vertical-align: middle;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
     }
     .sequence-validation {
       font-size: 12px;
@@ -112,27 +165,53 @@
       font-size: 12px;
       color: #666;
       margin: 5px 0 10px;
+      padding: 10px;
+      background: #f8f9fa;
+      border-radius: 6px;
     }
     .results-table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 15px;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
     .results-table th, .results-table td {
       border: 1px solid #ddd;
-      padding: 8px;
+      padding: 12px;
       text-align: left;
     }
     .results-table th {
       background-color: #f8f9fa;
+      font-weight: 500;
     }
     .results-table tr:nth-child(even) {
       background-color: #f8f9fa;
+    }
+    .results-table tr:hover {
+      background-color: #f1f3f8;
     }
     .download-hint {
       margin-top: 10px;
       font-style: italic;
       color: #666;
+      text-align: center;
+    }
+    .success-badge {
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 15px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .success-badge.methylated {
+      background-color: #e8f5e9;
+      color: #27ae60;
+    }
+    .success-badge.non-methylated {
+      background-color: #fde8e8;
+      color: #e74c3c;
     }
   </style>
 </head>
@@ -181,7 +260,7 @@
       </form>
     </div>
 
-    <div id="loading" class="loading"></div>
+    <div id="loading" class="loading">预测中...</div>
     <div id="result" class="result-box" style="display:none;"></div>
     <div id="error" class="error"></div>
   </div>
@@ -248,14 +327,17 @@
     // 显示结果
     function showResult(data) {
       const resultBox = document.getElementById('result');
+      const badgeClass = data.prediction === '甲基化' ? 'methylated' : 'non-methylated';
       resultBox.innerHTML = `
-        <strong>预测结果：</strong><br>
-        <strong>物种：</strong> ${data.species}<br>
-        <strong>序列：</strong> ${data.sequence}<br>
-        <strong>预测概率：</strong> ${data.probability}<br>
-        <strong>结果判定：</strong> <span style="color: ${data.prediction === '甲基化' ? '#27ae60' : '#e74c3c'};">
-          ${data.prediction}
-        </span>
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h3 style="color: #2c3e50; margin-bottom: 15px;">预测结果</h3>
+          <div class="success-badge ${badgeClass}">${data.prediction}</div>
+        </div>
+        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+          <p><strong>物种：</strong> ${data.species}</p>
+          <p><strong>序列：</strong> ${data.sequence}</p>
+          <p><strong>预测概率：</strong> ${(data.probability * 100).toFixed(2)}%</p>
+        </div>
       `;
       resultBox.style.display = 'block';
       document.getElementById('loading').style.display = 'none';
@@ -275,7 +357,7 @@
 
         if (!response.ok) {
           const data = await response.json();
-          showError(data.error || "预测失败");
+          showError(data.detail || data.error || "预测失败");
           return;
         }
 
@@ -320,7 +402,7 @@
 
         if (!response.ok) {
           const data = await response.json();
-          showError(data.error || "预测失败");
+          showError(data.detail || data.error || "预测失败");
           return;
         }
 
@@ -339,7 +421,8 @@
           const resultBox = document.getElementById('result');
           resultBox.innerHTML = `
             <div style="text-align: center;">
-              <h3>预测完成！</h3>
+              <h3 style="color: #2c3e50; margin-bottom: 15px;">预测完成！</h3>
+              <div class="success-badge methylated">Excel文件已生成</div>
               <p class="download-hint">Excel文件已开始下载，如果没有自动下载，请检查浏览器设置。</p>
             </div>
           `;
@@ -355,35 +438,39 @@
           }
 
           let tableHtml = `
-            <h3>预测结果</h3>
-            <table class="results-table">
-              <thead>
-                <tr>
-                  <th>序号</th>
-                  <th>序列</th>
-                  <th>预测概率</th>
-                  <th>结果判定</th>
-                </tr>
-              </thead>
-              <tbody>
+            <div style="text-align: center; margin-bottom: 20px;">
+              <h3 style="color: #2c3e50;">预测结果</h3>
+              <div class="success-badge methylated">共 ${results.length} 条序列</div>
+            </div>
+            <div style="overflow-x: auto;">
+              <table class="results-table">
+                <thead>
+                  <tr>
+                    <th>序号</th>
+                    <th>序列</th>
+                    <th>预测概率</th>
+                    <th>结果判定</th>
+                  </tr>
+                </thead>
+                <tbody>
           `;
 
           results.forEach(result => {
+            const badgeClass = result.prediction === '甲基化' ? 'methylated' : 'non-methylated';
             tableHtml += `
               <tr>
                 <td>${result.sequence_number}</td>
                 <td>${result.sequence}</td>
-                <td>${result.probability}</td>
-                <td style="color: ${result.prediction === '甲基化' ? '#27ae60' : '#e74c3c'}">
-                  ${result.prediction}
-                </td>
+                <td>${(result.probability * 100).toFixed(2)}%</td>
+                <td><span class="success-badge ${badgeClass}">${result.prediction}</span></td>
               </tr>
             `;
           });
 
           tableHtml += `
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           `;
 
           resultBox.innerHTML = tableHtml;
