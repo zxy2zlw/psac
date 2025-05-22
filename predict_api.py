@@ -80,7 +80,8 @@ async def predict(
         model.load_state_dict(torch.load(species_model_paths[species], map_location=device))
         model.eval()
 
-        if file:
+        # 僅當 file 存在且有檔名時才進入文件分支
+        if file is not None and getattr(file, "filename", None) and file.filename != "":
             content = (await file.read()).decode("utf-8").strip()
             sequences = [line.strip() for line in content.splitlines() if line.strip() and not line.startswith(">")]
             results = process_sequences(sequences, model)
@@ -88,11 +89,9 @@ async def predict(
             if output_format == "excel":
                 # 创建 DataFrame
                 df = pd.DataFrame(results)
-                
                 # 创建临时文件
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
                     df.to_excel(tmp.name, index=False)
-                    
                 # 返回 Excel 文件
                 return FileResponse(
                     tmp.name,
@@ -102,6 +101,7 @@ async def predict(
             else:
                 return results
 
+        # 單序列分支
         elif sequence:
             seq = sequence.strip()
             if len(seq) != 41:
