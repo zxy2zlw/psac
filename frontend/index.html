@@ -261,6 +261,33 @@
       document.getElementById('loading').style.display = 'none';
     }
 
+    // 提交预测请求
+    async function submitPrediction(formData) {
+      document.getElementById('error').style.display = 'none';
+      document.getElementById('result').style.display = 'none';
+      document.getElementById('loading').style.display = 'block';
+
+      try {
+        const response = await fetch("/predict", {
+          method: "POST",
+          body: formData
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          showError(data.error || "预测失败");
+          return;
+        }
+
+        const result = await response.json();
+        showResult(result);
+      } catch (err) {
+        showError("请求错误：" + err.message);
+      } finally {
+        document.getElementById('loading').style.display = 'none';
+      }
+    }
+
     // 处理序列输入表单提交
     document.getElementById('sequenceForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -371,4 +398,3 @@
   </script>
 </body>
 </html>
-
